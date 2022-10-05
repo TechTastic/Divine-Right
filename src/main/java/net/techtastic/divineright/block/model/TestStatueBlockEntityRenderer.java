@@ -1,49 +1,58 @@
 package net.techtastic.divineright.block.model;
 
-import net.fabricmc.fabric.api.event.client.ClientSpriteRegistryCallback;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.fabricmc.fabric.impl.client.indigo.renderer.helper.TextureHelper;
-import net.minecraft.block.AbstractBlock;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.block.entity.BlockEntityRenderer;
 import net.minecraft.client.render.block.entity.BlockEntityRendererFactory;
-import net.minecraft.client.texture.TextureManager;
-import net.minecraft.client.texture.TextureStitcher;
+import net.minecraft.client.render.entity.model.EntityModelLayers;
+import net.minecraft.client.util.DefaultSkinHelper;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.data.client.TexturedModel;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.resource.ResourceType;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.registry.Registry;
-import net.minecraft.world.World;
-import net.techtastic.divineright.DivineRight;
-import net.techtastic.divineright.block.ModBlocks;
+import net.minecraft.util.dynamic.DynamicSerializableUuid;
 import net.techtastic.divineright.block.entity.TestStatueBlockEntity;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.UUID;
+import java.util.Map;
 
 public class TestStatueBlockEntityRenderer implements BlockEntityRenderer<TestStatueBlockEntity> {
-    public TestStatueBlockEntityRenderer(BlockEntityRendererFactory.Context ctx) {}
+    private final TestStatueEntityModel model;
+
+    public TestStatueBlockEntityRenderer(BlockEntityRendererFactory.Context ctx) {
+        this.model = new TestStatueEntityModel(ctx.getLayerRenderDispatcher().getModelPart(EntityModelLayers.PLAYER));
+    }
 
     @Override
     public void render(TestStatueBlockEntity entity, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
-        World world = entity.getWorld();
-        UUID worshipped = entity.getWorshipped();
-        PlayerEntity player = world.getPlayerByUuid(worshipped);
-        Identifier skin;
+        GameProfile player = entity.getWorshipped();
+        RenderLayer skin;
+
+        if (player != null) {
+            skin = getRenderLayer(player);
+        } else {
+            skin = RenderLayer.getEntityCutoutNoCull(DefaultSkinHelper.getTexture(DynamicSerializableUuid.getUuidFromProfile(player)));
+        }
 
         matrices.push();
 
-        if (player != null) {
-            skin = ((AbstractClientPlayerEntity) player).getSkinTexture();
-        } else {
-            skin = new Identifier("divineright:textures/blocks/test_statue.png");
-        }
+        VertexConsumer vertexConsumer = vertexConsumers.getBuffer(skin);
+        this.model.render(matrices, vertexConsumer, light, OverlayTexture.DEFAULT_UV, 1.0F, 1.0F, 1.0F, 1.0F);
 
         matrices.pop();
+    }
+
+    public static RenderLayer getRenderLayer(@Nullable GameProfile profile) {
+        MinecraftClient minecraftClient = MinecraftClient.getInstance();
+        Map<MinecraftProfileTexture.Type, MinecraftProfileTexture> map = minecraftClient.getSkinProvider().getTextures(profile);
+
+        if (map.containsKey(com.mojang.authlib.minecraft.MinecraftProfileTexture.Type.SKIN)) {
+            return RenderLayer.getEntityTranslucent(minecraftClient.getSkinProvider().loadSkin((MinecraftProfileTexture)map.get(com.mojang.authlib.minecraft.MinecraftProfileTexture.Type.SKIN),
+                    com.mojang.authlib.minecraft.MinecraftProfileTexture.Type.SKIN));
+        } else {
+            return RenderLayer.getEntityCutoutNoCull(DefaultSkinHelper.getTexture(DynamicSerializableUuid.getUuidFromProfile(profile)));
+        }
     }
 }
